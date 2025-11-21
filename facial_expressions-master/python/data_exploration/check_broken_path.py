@@ -17,24 +17,20 @@ for idx, row in df.iterrows():
     fname = row["image"]
     fpath = os.path.join(IMAGES_DIR, fname)
 
-    # --- Check extension ---
     if not fname.lower().endswith(ALLOWED_EXT):
         wrong_extension.append(fname)
 
-    # --- Check existence ---
     if not os.path.exists(fpath):
         missing_files.append(fname)
         continue
 
-    # --- Check readability (corrupt detection) ---
     try:
         with Image.open(fpath) as img:
-            img.verify()   # PIL corruption check
+            img.verify()
     except Exception:
         corrupted_files.append(fname)
 
 
-# ----------- RESULTS -----------
 print("\n=== DATA INTEGRITY REPORT ===\n")
 
 print("Missing image files:", len(missing_files))
