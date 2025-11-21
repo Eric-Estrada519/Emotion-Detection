@@ -29,4 +29,4 @@ pandas
 matplotlib
 tabulate
 pillow
-
+seaborn
