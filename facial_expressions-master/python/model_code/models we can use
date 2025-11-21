@@ -1,0 +1,61 @@
+Hey guys so I know you probably wondering what models we can do
+since most of the data exploration part is done.
+
+I'm gonna put the link to a google doc here that is the data I got
+from exploring. If you make a model make sure you use the config file that
+has the training and validation data and then the test data. Look at my code and you
+can see how I access the data.
+
+google doc link: https://docs.google.com/document/d/1MyTTE4-TOs0NcriF0tJMjvvPP_NXfSE9DQlEud3sVJs/edit?usp=sharing
+
+1. Simple CNN:
+
+Architecture example:
+
+Conv → ReLU → MaxPool
+
+Conv → ReLU → MaxPool
+
+Flatten → Dense → Dropout → Softmax
+
+Tune:
+
+Learning rate
+
+Dropout
+
+Batch size
+
+Why:
+The dataset is big enough to train a small CNN but not a huge one.
+
+2. If you want to try we haven't done this with images ,but maybe if we look at a couple videos we can understand it.
+
+3. Data-Augmented Model (Very important)
+
+Because we have only:
+
+71 disgust
+
+16 fear
+
+9 contempt
+
+we must use augmentation.
+
+ Model G — Augmented MobileNetV2
+
+Train the same model as before but with:
+
+rotation range
+
+brightness shifts
+
+horizontal flips
+
+zoom range
+
+slight shifts
+
+Why:
+This reduces overfitting on tiny classes.

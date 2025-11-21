@@ -1,0 +1,6 @@
+SVM:
+
+Best parameters found:
+PCA components: 256
+SVM C: 0.1
+Best Validation Accuracy: 0.7567
