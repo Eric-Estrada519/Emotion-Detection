@@ -5,200 +5,226 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, classification_report
+import numpy as np
+
 from model_code.data_loader import (
     get_train_loader,
     get_val_loader,
     get_test_loader,
 )
 
-# ===========================
-# CLASS NAMES
-# ===========================
 CLASS_NAMES = [
-    "anger", "contempt", "disgust", "fear",
-    "happiness", "neutral", "sadness", "surprise"
+    "anger",
+    "contempt",
+    "disgust",
+    "fear",
+    "happiness",
+    "neutral",
+    "sadness",
+    "surprise",
 ]
-LABEL_TO_IDX = {c: i for i, c in enumerate(CLASS_NAMES)}
+LABEL_TO_IDX = {name: i for i, name in enumerate(CLASS_NAMES)}
 
 def convert_labels(labels, device):
+    """Convert labels (strings/tuples) → LongTensor of class IDs."""
     if isinstance(labels, torch.Tensor):
         return labels.long().to(device)
-    return torch.tensor([LABEL_TO_IDX[str(l).lower()] for l in labels],
-                        dtype=torch.long, device=device)
 
+    if isinstance(labels, (list, tuple)):
+        processed = [LABEL_TO_IDX[str(l).lower()] for l in labels]
+    else:
+        processed = [LABEL_TO_IDX[str(labels).lower()]]
 
-class ImprovedCNN(nn.Module):
+    return torch.tensor(processed, dtype=torch.long, device=device)
+
+class SimpleCNN(nn.Module):
     def __init__(self, num_classes=8, dropout=0.5):
-        super().__init__()
+        super(SimpleCNN, self).__init__()
 
-        self.features = nn.Sequential(
-            # Block 1
-            nn.Conv2d(3, 32, 3, padding=1),
-            nn.BatchNorm2d(32),
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # 224 -> 112
+            nn.MaxPool2d(2),
 
-            # Block 2
-            nn.Conv2d(32, 64, 3, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # 112 -> 56
-
-            # Block 3 (NEW)
-            nn.Conv2d(64, 128, 3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # 56 -> 28
+            nn.MaxPool2d(2),
         )
 
-        self.classifier = nn.Sequential(
+        self.fc_layers = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128 * 28 * 28, 512),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(512, 256),
+            nn.Linear(64 * 56 * 56, 256),  # 224x224 input → (224/4)=56
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(256, num_classes),
         )
 
     def forward(self, x):
-        x = self.features(x)
-        return self.classifier(x)
+        x = self.conv_layers(x)
+        x = self.fc_layers(x)
+        return x
 
-
-def train_epoch(model, loader, criterion, optimizer, device):
+def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
-    running_loss, correct, total = 0, 0, 0
+    total_loss, correct, total = 0, 0, 0
 
-    for imgs, labels in loader:
-        imgs = imgs.to(device)
+    for images, labels in loader:
+        images = images.to(device)
         labels = convert_labels(labels, device)
 
         optimizer.zero_grad()
-        outputs = model(imgs)
+        outputs = model(images)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
 
-        running_loss += loss.item()
+        total_loss += loss.item()
         preds = outputs.argmax(1)
         correct += (preds == labels).sum().item()
         total += labels.size(0)
 
-    return running_loss / len(loader), correct / total
+    return total_loss / len(loader), correct / total
 
 def validate(model, loader, criterion, device):
     model.eval()
-    running_loss, correct, total = 0, 0, 0
+    total_loss, correct, total = 0, 0, 0
 
     with torch.no_grad():
-        for imgs, labels in loader:
-            imgs = imgs.to(device)
+        for images, labels in loader:
+            images = images.to(device)
             labels = convert_labels(labels, device)
-            outputs = model(imgs)
 
+            outputs = model(images)
             loss = criterion(outputs, labels)
-            running_loss += loss.item()
 
+            total_loss += loss.item()
             preds = outputs.argmax(1)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
 
-    return running_loss / len(loader), correct / total
+    return total_loss / len(loader), correct / total
 
 
-def main():
+def run_training(dropout, lr):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using:", device)
-
-    results_dir = os.path.join(os.path.dirname(__file__), "../results_cnn_v2")
-    os.makedirs(results_dir, exist_ok=True)
-
-    # Loaders
     train_loader = get_train_loader(batch_size=32)
     val_loader = get_val_loader(batch_size=32)
-    test_loader = get_test_loader(batch_size=32)
 
-    # Model
-    model = ImprovedCNN(dropout=0.5).to(device)
+    model = SimpleCNN(dropout=dropout).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    # Weight decay for regularization
-    optimizer = optim.Adam(
-        model.parameters(),
-        lr=0.0005,
-        weight_decay=1e-4
-    )
+    train_losses, val_losses = [], []
+    train_accs, val_accs = [], []
 
-    # Learning rate scheduler
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
-
-    # Class weights for imbalance
-    weights = torch.tensor(
-        [6778, 5453, 362, 244, 195, 71, 16, 9],
-        dtype=torch.float32
-    )
-    weights = (weights.sum() / weights).to(device)
-    criterion = nn.CrossEntropyLoss(weight=weights)
-
-    # ============ TRAIN FOR 6 EPOCHS ============
-    epochs = 6
-    train_losses, val_losses, train_accs, val_accs = [], [], [], []
-
-    for epoch in range(epochs):
-        print(f"\n===== Epoch {epoch+1}/{epochs} =====")
-
-        tr_loss, tr_acc = train_epoch(model, train_loader, criterion, optimizer, device)
+    for epoch in range(6):
+        tr_loss, tr_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
         val_loss, val_acc = validate(model, val_loader, criterion, device)
-
-        scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
         train_accs.append(tr_acc)
         val_accs.append(val_acc)
 
-        print(f"Train Acc: {tr_acc:.4f} | Val Acc: {val_acc:.4f}")
+        print(f"Epoch {epoch+1}/6 | Train Acc={tr_acc:.4f}, Val Acc={val_acc:.4f}")
 
-        torch.save(model.state_dict(), os.path.join(results_dir, "best_cnn_v2.pt"))
+    # Save the last model of this configuration
+    torch.save(model.state_dict(), "temp_cnn.pt")
 
-    model.load_state_dict(torch.load(os.path.join(results_dir, "best_cnn_v2.pt")))
+    return val_acc, dropout, lr, train_losses, val_losses, train_accs, val_accs
+
+def main():
+    results_dir = os.path.join(os.path.dirname(__file__), "../results_cnn")
+    os.makedirs(results_dir, exist_ok=True)
+
+    dropout_vals = [0.3, 0.5]
+    lr_vals = [1e-3, 5e-4]
+
+    best_model = None
+    best_acc = -1
+
+    for d in dropout_vals:
+        for lr in lr_vals:
+            print(f"\n=== Training CNN (dropout={d}, lr={lr}) for 6 epochs ===")
+            acc, dropout, lr_used, tr_losses, val_losses, tr_accs, val_accs = run_training(d, lr)
+
+            if acc > best_acc:
+                best_acc = acc
+                best_model = (dropout, lr_used, tr_losses, val_losses, tr_accs, val_accs)
+                torch.save(torch.load("temp_cnn.pt"), "best_cnn.pt")
+
+    best_dropout, best_lr, tr_losses, val_losses, tr_accs, val_accs = best_model
+
+    print("\n=== BEST CNN CONFIGURATION ===")
+    print("Dropout:", best_dropout)
+    print("Learning Rate:", best_lr)
+    print("Validation Accuracy:", best_acc)
+
+    # Load best model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = SimpleCNN(dropout=best_dropout).to(device)
+    model.load_state_dict(torch.load("best_cnn.pt"))
+
+    test_loader = get_test_loader(batch_size=32)
+
     model.eval()
-
-    preds_all, labels_all = [], []
+    preds_list, labels_list = [], []
 
     with torch.no_grad():
-        for imgs, labels in test_loader:
-            imgs = imgs.to(device)
-            label_ids = convert_labels(labels, device).cpu()
-            preds = model(imgs).argmax(1).cpu()
-            preds_all.append(preds)
-            labels_all.append(label_ids)
+        for images, labels in test_loader:
+            images = images.to(device)
+            labels_tensor = convert_labels(labels, device).cpu()
 
-    preds = torch.cat(preds_all).numpy()
-    labels = torch.cat(labels_all).numpy()
+            preds = model(images).argmax(1).cpu()
 
-    # Confusion Matrix
+            preds_list.append(preds)
+            labels_list.append(labels_tensor)
+
+    preds = torch.cat(preds_list).numpy()
+    labels = torch.cat(labels_list).numpy()
+
+    # Confusion matrix
     cm = confusion_matrix(labels, preds)
+
     plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Purples",
                 xticklabels=CLASS_NAMES, yticklabels=CLASS_NAMES)
-    plt.title("Improved CNN v2 Confusion Matrix")
+    plt.title("CNN Confusion Matrix (6 Epoch Final Model)")
     plt.xlabel("Predicted")
     plt.ylabel("True")
     plt.tight_layout()
-    plt.savefig(os.path.join(results_dir, "confusion_matrix_v2.png"))
+    plt.savefig(os.path.join(results_dir, "cnn_confusion_matrix.png"))
 
-    # Classification Report
-    report = classification_report(
-        labels, preds, target_names=CLASS_NAMES, digits=4
-    )
-    with open(os.path.join(results_dir, "classification_report_v2.txt"), "w") as f:
+    # Accuracy curve
+    epochs = range(1, 7)
+    plt.figure(figsize=(8, 6))
+    plt.plot(epochs, tr_accs, label="Train Acc")
+    plt.plot(epochs, val_accs, label="Val Acc")
+    plt.legend()
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.title("CNN Accuracy Curve (6 Epochs)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, "cnn_accuracy_curve.png"))
+
+    # Loss curve
+    plt.figure(figsize=(8, 6))
+    plt.plot(epochs, tr_losses, label="Train Loss")
+    plt.plot(epochs, val_losses, label="Val Loss")
+    plt.legend()
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("CNN Loss Curve (6 Epochs)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, "cnn_loss_curve.png"))
+
+    # Classification report
+    report = classification_report(labels, preds, target_names=CLASS_NAMES, digits=4)
+    with open(os.path.join(results_dir, "cnn_classification_report.txt"), "w") as f:
         f.write(report)
 
-    print("\nSaved Improved CNN results to:", results_dir)
+    print("\nSaved CNN 6-epoch results to:", results_dir)
 
 
 if __name__ == "__main__":
     main()
-
