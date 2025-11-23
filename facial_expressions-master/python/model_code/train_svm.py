@@ -1,93 +1,197 @@
-
+import os
+import numpy as np
 import torch
 import torch.nn as nn
-from torchvision import models, transforms
-from model_code.data_loader import get_train_loader, get_val_loader
-import pandas as pd
+from torchvision import models
 from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import PCA
 from sklearn.svm import LinearSVC
-from sklearn.model_selection import GridSearchCV
-from sklearn.pipeline import Pipeline
-import numpy as np
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# -------------------------------
-# 1. Load ResNet18 backbone
-# -------------------------------
-print("Loading ResNet18 for feature extraction...")
-resnet = models.resnet18(pretrained=True)
-resnet.fc = nn.Identity()
-resnet.eval()
+from model_code.data_loader import (
+    get_train_loader,
+    get_val_loader,
+    get_test_loader,
+)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-resnet = resnet.to(device)
+def get_feature_extractor():
+    print("Loading ResNet18...")
+    resnet = models.resnet18(pretrained=True)
+    resnet.fc = nn.Identity()
+    resnet.eval()
 
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor()
-])
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    resnet.to(device)
+    print(f"Using device: {device}")
+    return resnet, device
 
-print("Loading train and validation sets...")
-train_loader = get_train_loader(batch_size=1)
-val_loader = get_val_loader(batch_size=1)
+def extract_features(loader, model, device):
+    feats, labels = [], []
 
-def extract_features(dataloader):
-    features = []
-    labels = []
-    for img, label in dataloader:
-        img = img.to(device)
-        label = label[0].lower()
+    for imgs, lbls in loader:
+        imgs = imgs.to(device).float()
+
         with torch.no_grad():
-            feat = resnet(img)[0].cpu().numpy()
-        features.append(feat)
-        labels.append(label)
-    return np.array(features), np.array(labels)
+            f = model(imgs).cpu().numpy()
 
-print("Extracting train features...")
-X_train, y_train = extract_features(train_loader)
+        feats.append(f)
 
-print("Extracting val features...")
-X_val, y_val = extract_features(val_loader)
+        # handle batch labels
+        if isinstance(lbls, (list, tuple)):
+            labels.extend([x.lower() for x in lbls])
+        else:
+            labels.append(lbls.lower())
 
-# Encode labels
-le = LabelEncoder()
-y_train_enc = le.fit_transform(y_train)
-y_val_enc   = le.transform(y_val)
+    return np.vstack(feats), np.array(labels)
 
-pipeline = Pipeline([
-    ("pca", PCA()),
-    ("svm", LinearSVC(max_iter=10000))
-])
+def main():
+    # Setup result directory
+    results_dir = os.path.join(os.path.dirname(__file__), "../results_svm")
+    os.makedirs(results_dir, exist_ok=True)
 
-param_grid = {
-    "pca__n_components": [32, 64, 128, 256],
-    "svm__C": [0.01, 0.1, 1, 10]
-}
+    # Load loaders
+    train_loader = get_train_loader(batch_size=32)
+    val_loader = get_val_loader(batch_size=32)
+    test_loader = get_test_loader(batch_size=32)
+
+    # Extract ResNet features
+    resnet, device = get_feature_extractor()
+
+    print("Extracting train features...")
+    X_train, y_train_str = extract_features(train_loader, resnet, device)
+
+    print("Extracting validation features...")
+    X_val, y_val_str = extract_features(val_loader, resnet, device)
+
+    print("Extracting test features...")
+    X_test, y_test_str = extract_features(test_loader, resnet, device)
+
+    # Encode labels
+    encoder = LabelEncoder()
+    y_train = encoder.fit_transform(y_train_str)
+    y_val   = encoder.transform(y_val_str)
+    y_test  = encoder.transform(y_test_str)
+
+    pca_sizes = [32, 64, 128, 256]
+    C_values = [0.01, 0.1, 1.0, 10]
+
+    best_acc = -1
+    best_params = None
+    best_model = None
+    best_pca = None
+
+    # Store (pca_size, C, acc) for the plot
+    val_accuracy_record = []
+
+    print("\n=== SVM Model Selection ===\n")
+
+    for n_comp in pca_sizes:
+        print(f"\nTesting PCA = {n_comp}")
+
+        pca = PCA(n_components=n_comp)
+        X_train_pca = pca.fit_transform(X_train)
+        X_val_pca   = pca.transform(X_val)
+
+        for C in C_values:
+            svm = LinearSVC(C=C, max_iter=20000)
+            svm.fit(X_train_pca, y_train)
+
+            preds = svm.predict(X_val_pca)
+            acc = accuracy_score(y_val, preds)
+
+            print(f"PCA={n_comp}, C={C} → Val Acc: {acc:.4f}")
+            val_accuracy_record.append((n_comp, C, acc))
+
+            if acc > best_acc:
+                best_acc = acc
+                best_params = (n_comp, C)
+                best_model = svm
+                best_pca = pca
+
+    print("\n=== Best SVM Parameters ===")
+    print(f"PCA components: {best_params[0]}")
+    print(f"SVM C: {best_params[1]}")
+    print(f"Validation Accuracy: {best_acc:.4f}")
+
+    X_trainval = np.vstack([X_train, X_val])
+    y_trainval = np.hstack([y_train, y_val])
+
+    final_pca = PCA(n_components=best_params[0])
+    X_trainval_pca = final_pca.fit_transform(X_trainval)
+    X_test_pca = final_pca.transform(X_test)
+
+    final_svm = LinearSVC(C=best_params[1], max_iter=20000)
+    final_svm.fit(X_trainval_pca, y_trainval)
+
+    preds = final_svm.predict(X_test_pca)
+    acc = accuracy_score(y_test, preds)
+    print(f"\nFinal SVM Test Accuracy: {acc:.4f}")
+
+    report = classification_report(
+        y_test, preds, target_names=encoder.classes_, digits=4
+    )
+    print(report)
+
+    with open(os.path.join(results_dir, "svm_classification_report.txt"), "w") as f:
+        f.write(report)
 
 
-print("Running parameter search...")
+    cm = confusion_matrix(y_test, preds)
 
-best_acc = -1
-best_params = None
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        cm, annot=True, fmt="d", cmap="Blues",
+        xticklabels=encoder.classes_, yticklabels=encoder.classes_
+    )
+    plt.title("SVM Confusion Matrix (Final Model)")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, "svm_confusion_matrix.png"))
+    plt.close()
 
-for n_comp in param_grid["pca__n_components"]:
-    for C in param_grid["svm__C"]:
-        # Train pipeline on train set
-        pipeline.set_params(pca__n_components=n_comp, svm__C=C)
-        pipeline.fit(X_train, y_train_enc)
+    explained = final_pca.explained_variance_ratio_
+    cumulative = explained.cumsum()
 
-        # Eval on validation set
-        acc = pipeline.score(X_val, y_val_enc)
-        print(f"PCA={n_comp}, C={C} → Val Acc: {acc:.4f}")
+    plt.figure(figsize=(8,6))
+    plt.plot(cumulative, marker="o")
+    plt.axvline(best_params[0], color="red", linestyle="--")
+    plt.title("PCA Variance Explained (SVM)")
+    plt.xlabel("Components")
+    plt.ylabel("Cumulative Variance")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, "pca_variance_curve.png"))
+    plt.close()
 
-        if acc > best_acc:
-            best_acc = acc
-            best_params = (n_comp, C)
+    plt.figure(figsize=(8,6))
 
-print("\nBest parameters found:")
-print(f"PCA components: {best_params[0]}")
-print(f"SVM C: {best_params[1]}")
-print(f"Best Validation Accuracy: {best_acc:.4f}")
+    for C in C_values:
+        # accuracies where C = that value
+        accs = [acc for (pca_n, c_val, acc) in val_accuracy_record if c_val == C]
+        plt.plot(pca_sizes, accs, marker="o", label=f"C={C}")
+
+    plt.xlabel("PCA Components")
+    plt.ylabel("Validation Accuracy")
+    plt.title("SVM Model Selection — PCA Components vs Accuracy")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, "svm_model_selection.png"))
+    plt.close()
+
+    print("\nSaved:")
+    print(" - svm_confusion_matrix.png")
+    print(" - pca_variance_curve.png")
+    print(" - svm_model_selection.png")
+    print(" - svm_classification_report.txt")
+
+
+if __name__ == "__main__":
+    main()
+
 """
 
 Loading train and validation sets...
