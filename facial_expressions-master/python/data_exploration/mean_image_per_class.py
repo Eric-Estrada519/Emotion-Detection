@@ -1,14 +1,15 @@
 import os
 import matplotlib.pyplot as plt
-from model_code.data_loader import get_loader
+from model_code.data_loader import get_all_data
 from config import BASE_DIR
+
 
 # Folder to save mean images
 OUTPUT_DIR = os.path.join(BASE_DIR, "mean_images")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Load dataset
-loader = get_loader(batch_size=1, shuffle=True)
+loader = get_all_data(batch_size=1, shuffle=True)
 dataset = loader.dataset
 
 classes = sorted(set(dataset.data["emotion"].str.lower()))
@@ -51,4 +52,3 @@ plt.savefig(save_path, bbox_inches='tight', dpi=200)
 plt.show()
 
 print(f"\nSaved combined mean grid to: {save_path}")
-
