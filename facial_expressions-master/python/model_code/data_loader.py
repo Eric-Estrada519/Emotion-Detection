@@ -4,7 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from torchvision import transforms
 from config import IMAGES_DIR
-from config import TEST_CSV, VAL_CSV, TRAIN_CSV
+from config import TEST_CSV, VAL_CSV, TRAIN_CSV, LEGEND_CSV
 
 class EmotionDataset(Dataset):
     def __init__(self, csv_path, transform=None, cnn_mode=False):
@@ -51,6 +51,13 @@ def get_transforms():
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
     ])
+
+def get_all_data(batch_size=32, shuffle=True):
+    return DataLoader(
+        EmotionDataset(LEGEND_CSV, transform=get_transforms()),
+        batch_size=batch_size,
+        shuffle=shuffle
+    )
 
 def get_train_loader(batch_size=32, shuffle=True):
     return DataLoader(
