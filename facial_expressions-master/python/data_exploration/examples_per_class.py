@@ -2,10 +2,10 @@ import matplotlib
 matplotlib.use("TkAgg")
 
 import matplotlib.pyplot as plt
-from model_code.data_loader import get_loader
+from model_code.data_loader import get_train_loader
 
 
-loader = get_loader(batch_size=1, shuffle=True)
+loader = get_train_loader(batch_size=1, shuffle=True)
 dataset = loader.dataset
 
 examples = {}
@@ -27,6 +27,3 @@ for i, cls in enumerate(classes):
     plt.axis("off")
 
 plt.show()
-
-
-"""Shows the data that is not processed by the model_code"""
