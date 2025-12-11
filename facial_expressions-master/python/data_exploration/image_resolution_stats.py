@@ -7,7 +7,7 @@ import pandas as pd
 
 resolutions = []
 
-# Loop through all image files in the images directory
+#This code loops through all image files in the images directory so we can get the resolutions
 for fname in os.listdir(IMAGES_DIR):
     if fname.lower().endswith((".jpg")):
         path = os.path.join(IMAGES_DIR, fname)

@@ -16,6 +16,7 @@ from model_code.data_loader import (
     get_test_loader,
 )
 
+#This function gets the ResNet18 model and prepares it so it can be used as a feature extractor later on
 def get_feature_extractor():
     print("Loading ResNet18...")
     resnet = models.resnet18(pretrained=True)
@@ -27,6 +28,7 @@ def get_feature_extractor():
     print(f"Using device: {device}")
     return resnet, device
 
+#This function gets data and converts the images into numerical feature vectors so we can train the models
 def extract_features(loader, model, device):
     feats, labels = [], []
 
@@ -38,7 +40,7 @@ def extract_features(loader, model, device):
 
         feats.append(f)
 
-        # handle batch labels
+        #For handling batch labels
         if isinstance(lbls, (list, tuple)):
             labels.extend([x.lower() for x in lbls])
         else:
@@ -47,16 +49,16 @@ def extract_features(loader, model, device):
     return np.vstack(feats), np.array(labels)
 
 def main():
-    # Setup result directory
+    #This bit defines where the results go
     results_dir = os.path.join(os.path.dirname(__file__), "../results_svm")
     os.makedirs(results_dir, exist_ok=True)
 
-    # Load loaders
+    #Load the loaders
     train_loader = get_train_loader(batch_size=32)
     val_loader = get_val_loader(batch_size=32)
     test_loader = get_test_loader(batch_size=32)
 
-    # Extract ResNet features
+    #We extract the ResNet features here with the function above
     resnet, device = get_feature_extractor()
 
     print("Extracting train features...")
@@ -68,7 +70,7 @@ def main():
     print("Extracting test features...")
     X_test, y_test_str = extract_features(test_loader, resnet, device)
 
-    # Encode labels
+    #This section is for encoding labels
     encoder = LabelEncoder()
     y_train = encoder.fit_transform(y_train_str)
     y_val   = encoder.transform(y_val_str)
@@ -82,7 +84,7 @@ def main():
     best_model = None
     best_pca = None
 
-    # Store (pca_size, C, acc) for the plot
+    #Store combinations for pca_size, C, and acc so we can plot later
     val_accuracy_record = []
 
     print("\n=== SVM Model Selection ===\n")
@@ -138,6 +140,7 @@ def main():
         f.write(report)
 
 
+    #This segment is for visualizing the results with various graphs
     cm = confusion_matrix(y_test, preds)
 
     plt.figure(figsize=(8, 6))

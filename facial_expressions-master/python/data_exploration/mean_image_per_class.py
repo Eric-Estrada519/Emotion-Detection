@@ -4,11 +4,10 @@ from model_code.data_loader import get_all_data
 from config import BASE_DIR
 
 
-# Folder to save mean images
+#Output folder to save mean images
 OUTPUT_DIR = os.path.join(BASE_DIR, "mean_images")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Load dataset
 loader = get_all_data(batch_size=1, shuffle=True)
 dataset = loader.dataset
 
@@ -19,7 +18,7 @@ sums = {cls: None for cls in classes}
 counts = {cls: 0 for cls in classes}
 
 print("Computing mean images...")
-
+#Code to compute the mean images
 for img, label in loader:
     cls = label[0].lower()
     img = img[0].float()
@@ -33,7 +32,7 @@ for img, label in loader:
 
 mean_images = {cls: (sums[cls] / counts[cls]) for cls in classes}
 
-
+#Code to plot the mean image for each class
 num_classes = len(classes)
 plt.figure(figsize=(4 * num_classes, 4))
 

@@ -25,8 +25,8 @@ CLASS_NAMES = [
 ]
 LABEL_TO_IDX = {name: i for i, name in enumerate(CLASS_NAMES)}
 
+#This function takes the image labels and converts them into a LongTensor of class IDs, so we can train the cnn later
 def convert_labels(labels, device):
-    """Convert labels (strings/tuples) → LongTensor of class IDs."""
     if isinstance(labels, torch.Tensor):
         return labels.long().to(device)
 
@@ -37,6 +37,7 @@ def convert_labels(labels, device):
 
     return torch.tensor(processed, dtype=torch.long, device=device)
 
+#We define our own CNN class here
 class SimpleCNN(nn.Module):
     def __init__(self, num_classes=8, dropout=0.5):
         super(SimpleCNN, self).__init__()
@@ -53,7 +54,7 @@ class SimpleCNN(nn.Module):
 
         self.fc_layers = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(64 * 56 * 56, 256),  # 224x224 input → (224/4)=56
+            nn.Linear(64 * 56 * 56, 256),  #224x224 input, (224/4)=56
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(256, num_classes),
@@ -64,6 +65,7 @@ class SimpleCNN(nn.Module):
         x = self.fc_layers(x)
         return x
 
+#This function trains the CNN on one epoch and returns average loss and accuracy
 def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
     total_loss, correct, total = 0, 0, 0
@@ -85,6 +87,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
 
     return total_loss / len(loader), correct / total
 
+#This function runs the model through a evaluation dataset and returns the average validation loss & accuracy
 def validate(model, loader, criterion, device):
     model.eval()
     total_loss, correct, total = 0, 0, 0
@@ -104,7 +107,7 @@ def validate(model, loader, criterion, device):
 
     return total_loss / len(loader), correct / total
 
-
+#This function trains the CNN for 6 epochs for certain dropout & lr values 
 def run_training(dropout, lr):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_loader = get_train_loader(batch_size=32)
@@ -128,7 +131,6 @@ def run_training(dropout, lr):
 
         print(f"Epoch {epoch+1}/6 | Train Acc={tr_acc:.4f}, Val Acc={val_acc:.4f}")
 
-    # Save the last model of this configuration
     torch.save(model.state_dict(), "temp_cnn.pt")
 
     return val_acc, dropout, lr, train_losses, val_losses, train_accs, val_accs
@@ -160,7 +162,7 @@ def main():
     print("Learning Rate:", best_lr)
     print("Validation Accuracy:", best_acc)
 
-    # Load best model
+    #Loads the best model from above
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = SimpleCNN(dropout=best_dropout).to(device)
     model.load_state_dict(torch.load("best_cnn.pt"))
@@ -183,7 +185,7 @@ def main():
     preds = torch.cat(preds_list).numpy()
     labels = torch.cat(labels_list).numpy()
 
-    # Confusion matrix
+    #We visualize the data here using various graphs
     cm = confusion_matrix(labels, preds)
 
     plt.figure(figsize=(8, 6))
@@ -195,7 +197,7 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir, "cnn_confusion_matrix.png"))
 
-    # Accuracy curve
+
     epochs = range(1, 7)
     plt.figure(figsize=(8, 6))
     plt.plot(epochs, tr_accs, label="Train Acc")
@@ -207,7 +209,7 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir, "cnn_accuracy_curve.png"))
 
-    # Loss curve
+
     plt.figure(figsize=(8, 6))
     plt.plot(epochs, tr_losses, label="Train Loss")
     plt.plot(epochs, val_losses, label="Val Loss")
@@ -218,7 +220,7 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir, "cnn_loss_curve.png"))
 
-    # Classification report
+
     report = classification_report(labels, preds, target_names=CLASS_NAMES, digits=4)
     with open(os.path.join(results_dir, "cnn_classification_report.txt"), "w") as f:
         f.write(report)

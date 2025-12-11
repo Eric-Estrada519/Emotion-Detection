@@ -5,13 +5,15 @@ import os
 
 df = pd.read_csv(LEGEND_CSV)
 
+#Code to split data into training and temporary sets
 train_df, temp_df = train_test_split(
     df,
     test_size=0.30,
-    stratify=df["emotion"],     # keep balanced classes
+    stratify=df["emotion"],
     random_state=42
 )
 
+#Code to split temporary set of data into validation and testing
 val_df, test_df = train_test_split(
     temp_df,
     test_size=0.50,
@@ -19,7 +21,7 @@ val_df, test_df = train_test_split(
     random_state=42
 )
 
-# Save
+#Code to save the CSV files into a different directory
 data_dir = os.path.dirname(LEGEND_CSV)
 train_df.to_csv(os.path.join(data_dir, "train.csv"), index=False)
 val_df.to_csv(os.path.join(data_dir, "val.csv"), index=False)

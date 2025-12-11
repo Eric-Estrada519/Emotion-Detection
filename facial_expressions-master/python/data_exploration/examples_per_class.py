@@ -11,12 +11,14 @@ dataset = loader.dataset
 examples = {}
 classes = sorted(set(dataset.data["emotion"]))
 
+#Code to get an example from each class
 for img, label in loader:
     label = label[0].lower()
     if label not in examples:
         examples[label] = img[0]
     if len(examples) == len(classes):
         break
+
 
 plt.figure(figsize=(4 * len(classes), 4))
 for i, cls in enumerate(classes):

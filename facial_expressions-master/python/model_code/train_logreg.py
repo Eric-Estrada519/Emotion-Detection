@@ -14,9 +14,10 @@ from model_code.data_loader import (
 )
 
 
-# -------------------------------------------------
-# Extract ResNet features for an entire dataloader
-# -------------------------------------------------
+
+#This function gets data for an entire dataloader and converts the images into numerical feature vectors
+#that can be used to train the actual models
+
 def extract_features(loader, feature_extractor, device):
     feature_extractor.eval()
 
@@ -29,7 +30,7 @@ def extract_features(loader, feature_extractor, device):
             features = feature_extractor(images).cpu().numpy()
 
             feats.append(features)
-            labels.extend(lbls)  # keep raw emotion strings
+            labels.extend(lbls) 
 
     feats = np.vstack(feats)
     return feats, labels
@@ -57,7 +58,7 @@ def main():
     print("Extracting test features...")
     X_test, y_test = extract_features(test_loader, resnet, device)
 
-    # Convert string labels to integers consistently
+    #This bit converts labels from their string forms to their integer versions
     class_names = sorted(list(set(y_train + y_val + y_test)))
     name_to_idx = {name: i for i, name in enumerate(class_names)}
 
@@ -69,6 +70,8 @@ def main():
     C_options = [0.01, 0.1, 1.0, 10]
 
     results = []
+
+    #This part trains multiple logistic regression models with different PCA dimensions so we can compare what combinations do better later on
 
     for pca_dim in pca_options:
         print(f"\nRunning PCA = {pca_dim}")
@@ -102,7 +105,7 @@ def main():
 
     print("\nTraining final model on TRAIN+VAL...")
 
-    # Combine datasets
+    #This part combines the datasets
     X_all = np.vstack([X_train, X_val])
     y_all = np.concatenate([y_train_idx, y_val_idx])
 
@@ -110,6 +113,7 @@ def main():
     X_all_pca = pca_final.fit_transform(X_all)
     X_test_pca = pca_final.transform(X_test)
 
+    #This part trains a new LR model with the best parameters we found earlier, and plots different graphs to show accuracy
     final_model = LogisticRegression(
         C=best_C,
         max_iter=2000,

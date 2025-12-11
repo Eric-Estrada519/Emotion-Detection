@@ -13,6 +13,7 @@ wrong_extension = []
 
 ALLOWED_EXT = (".jpg", ".jpeg", ".png")
 
+#This loop goes through the dataframe and check to make sure the image exists, has the right extension, and is not corrupt
 for idx, row in df.iterrows():
     fname = row["image"]
     fpath = os.path.join(IMAGES_DIR, fname)
@@ -37,7 +38,7 @@ print("Missing image files:", len(missing_files))
 print("Corrupted image files:", len(corrupted_files))
 print("Wrong extension files:", len(wrong_extension))
 
-# Save reports
+#Saves the report to the directory
 report_dir = os.path.join(os.path.dirname(IMAGES_DIR), "integrity_reports")
 os.makedirs(report_dir, exist_ok=True)
 
