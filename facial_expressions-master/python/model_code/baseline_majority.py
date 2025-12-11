@@ -1,6 +1,7 @@
 import pandas as pd
 from config import TRAIN_CSV, VAL_CSV, TEST_CSV
 
+#This function is for the majority class classifier.  A simple model we can use as a benchmark for future models
 def compute_majority_baseline(csv_path):
     df = pd.read_csv(csv_path)
     majority_class = df["emotion"].value_counts().idxmax()
@@ -9,6 +10,7 @@ def compute_majority_baseline(csv_path):
 
     accuracy = majority_count / total
     return accuracy, majority_class
+
 
 def main():
     train_acc, train_class = compute_majority_baseline(TRAIN_CSV)

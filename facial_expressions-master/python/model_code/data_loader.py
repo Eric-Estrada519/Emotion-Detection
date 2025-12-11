@@ -12,10 +12,10 @@ class EmotionDataset(Dataset):
         self.transform = transform
         self.cnn_mode = cnn_mode
 
-        # normalize
+        #To normalize our labels
         self.data["emotion"] = self.data["emotion"].str.lower()
 
-        # Only needed for CNN labels
+        #To handle CNN labels
         if self.cnn_mode:
             from sklearn.preprocessing import LabelEncoder
             self.encoder = LabelEncoder()
@@ -34,10 +34,8 @@ class EmotionDataset(Dataset):
             img = self.transform(img)
 
         if self.cnn_mode:
-            # Return integer class ID for CNN
             label = int(row["label_id"])
         else:
-            # Return raw emotion string for SVM, Logistic Regression
             label = row["emotion"]
 
         return img, label
@@ -45,7 +43,7 @@ class EmotionDataset(Dataset):
 
 
 
-
+#Some helper functions to create DataLoaders for different splits of the dataset
 def get_transforms():
     return transforms.Compose([
         transforms.Resize((224, 224)),

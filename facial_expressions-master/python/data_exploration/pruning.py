@@ -3,7 +3,7 @@ import shutil
 from PIL import Image
 from config import IMAGES_DIR
 
-# Folder to store bad images (so you can review them)
+#Defines a folder to store bad images (so we can review them later)
 BAD_DIR = os.path.join(os.path.dirname(IMAGES_DIR), "bad_images")
 os.makedirs(BAD_DIR, exist_ok=True)
 
@@ -20,7 +20,7 @@ for fname in os.listdir(IMAGES_DIR):
             with Image.open(path) as img:
                 w, h = img.size
 
-                # Flag tiny or extremely weird images
+                #Flags tiny or extremely weird images
                 if w < MIN_SIZE or h < MIN_SIZE:
                     bad_images.append(fname)
 
@@ -28,7 +28,7 @@ for fname in os.listdir(IMAGES_DIR):
             print("Error reading:", fname, e)
             bad_images.append(fname)
 
-# Move bad images out of training folder
+#Code to move bad images out of training folder
 for fname in bad_images:
     src = os.path.join(IMAGES_DIR, fname)
     dst = os.path.join(BAD_DIR, fname)

@@ -13,9 +13,6 @@ from model_code.data_loader import (
     get_test_loader,
 )
 
-# --------------------------------------------------------------
-# Correct class names (index-aligned)
-# --------------------------------------------------------------
 CLASS_NAMES = [
     "anger",      # 0
     "contempt",   # 1
@@ -27,9 +24,6 @@ CLASS_NAMES = [
     "surprise"    # 7
 ]
 
-# --------------------------------------------------------------
-# Mapping string → integer label
-# --------------------------------------------------------------
 LABEL_TO_IDX = {
     "anger": 0,
     "contempt": 1,
@@ -42,14 +36,11 @@ LABEL_TO_IDX = {
 }
 
 
-# --------------------------------------------------------------
-# Convert DataLoader to NumPy arrays
-# --------------------------------------------------------------
+#Function to convert DataLoader to NumPy arrays so we can train the xgboost classifier later
 def get_numpy_data(loader):
     X_list, y_list = [], []
 
     for imgs, labels in loader:
-        # imgs shape: (B, 3, 224, 224) → flatten each image
         X_list.append(imgs.numpy().reshape(len(imgs), -1))
 
         numeric_labels = [LABEL_TO_IDX[str(l).lower()] for l in labels]
@@ -58,9 +49,6 @@ def get_numpy_data(loader):
     return np.vstack(X_list), np.hstack(y_list)
 
 
-# --------------------------------------------------------------
-# MAIN
-# --------------------------------------------------------------
 def main():
     results_dir = os.path.join(os.path.dirname(__file__), "../results_xgboost")
     os.makedirs(results_dir, exist_ok=True)
@@ -74,21 +62,16 @@ def main():
     X_val_raw, y_val = get_numpy_data(val_loader)
     X_test_raw, y_test = get_numpy_data(test_loader)
 
-    # Combine train + val for CV
     X_full = np.vstack([X_train_raw, X_val_raw])
     y_full = np.hstack([y_train, y_val])
 
-    # ----------------------------------------------------------
-    # PCA REDUCTION
-    # ----------------------------------------------------------
+
     print("Running PCA...")
     pca = PCA(n_components=256)
     X_full_pca = pca.fit_transform(X_full)
     X_test_pca = pca.transform(X_test_raw)
 
-    # ----------------------------------------------------------
-    # HYPERPARAMETERS
-    # ----------------------------------------------------------
+    #Some hyperparameter combinations that we will use
     param_grid = [
         {"n_estimators": 200, "max_depth": 5, "learning_rate": 0.1},
         {"n_estimators": 300, "max_depth": 6, "learning_rate": 0.05},
@@ -98,7 +81,6 @@ def main():
     best_acc = 0.0
     best_params = None
 
-    # For plots
     param_labels = []
     mean_train_accs = []
     mean_val_accs = []
@@ -130,12 +112,11 @@ def main():
 
             model.fit(X_tr, y_tr)
 
-            # Training accuracy
+            #This bit is for calculating training & validation accuracy
             preds_tr = model.predict(X_tr)
             tr_acc = accuracy_score(y_tr, preds_tr)
             fold_train_acc.append(tr_acc)
 
-            # Validation accuracy
             preds_va = model.predict(X_va)
             va_acc = accuracy_score(y_va, preds_va)
             fold_val_acc.append(va_acc)
@@ -148,13 +129,12 @@ def main():
         print(f" Mean Train Acc: {mean_train:.4f}")
         print(f" Mean Val Acc:   {mean_val:.4f}")
 
-        # save for plotting
         label = f"{params['n_estimators']} trees, depth={params['max_depth']}, lr={params['learning_rate']}"
         param_labels.append(label)
         mean_train_accs.append(mean_train)
         mean_val_accs.append(mean_val)
 
-        # Track best hyperparameters
+        #Getting the best hyperparameters
         if mean_val > best_acc:
             best_acc = mean_val
             best_params = params
@@ -163,9 +143,7 @@ def main():
     print(best_params)
     print(f"Best CV Accuracy: {best_acc:.4f}")
 
-    # ----------------------------------------------------------
-    # PLOT TRAIN/VAL ERROR ACROSS PARAMETER SETS
-    # ----------------------------------------------------------
+    #This segment is for plotting the errors
     train_errors = [1 - acc for acc in mean_train_accs]
     val_errors = [1 - acc for acc in mean_val_accs]
 
@@ -181,9 +159,7 @@ def main():
     plt.savefig(os.path.join(results_dir, "xgboost_train_val_error.png"))
     plt.close()
 
-    # ----------------------------------------------------------
-    # FINAL TRAINING ON FULL TRAIN+VAL
-    # ----------------------------------------------------------
+    #Training the best model we found again, so we can plot more specific graphs
     print("\nRetraining final model...")
     best_model = XGBClassifier(
         n_estimators=best_params["n_estimators"],
@@ -196,17 +172,13 @@ def main():
     )
     best_model.fit(X_full_pca, y_full)
 
-    # ----------------------------------------------------------
-    # TEST EVALUATION
-    # ----------------------------------------------------------
+
     preds_test = best_model.predict(X_test_pca)
     test_acc = accuracy_score(y_test, preds_test)
 
     print(f"\n=== FINAL TEST ACCURACY: {test_acc:.4f} ===")
 
-    # ----------------------------------------------------------
-    # CONFUSION MATRIX
-    # ----------------------------------------------------------
+    #Extra graphs to help us visualize how effective the final model was
     cm = confusion_matrix(y_test, preds_test)
 
     plt.figure(figsize=(8, 6))
@@ -225,9 +197,7 @@ def main():
     plt.savefig(os.path.join(results_dir, "xgboost_confusion_matrix.png"))
     plt.close()
 
-    # ----------------------------------------------------------
-    # PER-CLASS ERROR BAR CHART
-    # ----------------------------------------------------------
+
     per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
     per_class_error = 1 - per_class_accuracy
 
@@ -240,9 +210,7 @@ def main():
     plt.savefig(os.path.join(results_dir, "xgboost_per_class_error.png"))
     plt.close()
 
-    # ----------------------------------------------------------
-    # CLASSIFICATION REPORT
-    # ----------------------------------------------------------
+ 
     report = classification_report(
         y_test,
         preds_test,

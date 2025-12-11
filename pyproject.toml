@@ -1,0 +1,13 @@
+[project]
+name = "facial_expressions"
+version = "0.1.0"
+
+[tool.setuptools]
+package-dir = {"" = "facial_expressions-master/python"}
+
+[tool.setuptools.packages.find]
+where = ["facial_expressions-master/python"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
